@@ -1,0 +1,52 @@
+{
+  "name": "@jupiterthewarlock/llm-wiki",
+  "version": "0.6.1",
+  "description": "Agent-native LLM Wiki — AI-maintained knowledge base with Obsidian compatibility",
+  "type": "module",
+  "bin": {
+    "llm-wiki": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "pretest": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "llm",
+    "wiki",
+    "knowledge-base",
+    "ai",
+    "obsidian",
+    "agent"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JupiterTheWarlock/llm-wiki-cli.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "dependencies": {
+    "commander": "^13.0.0",
+    "gray-matter": "^4.0.3",
+    "toml": "^3.0.0"
+  },
+  "optionalDependencies": {
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
