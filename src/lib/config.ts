@@ -22,6 +22,16 @@ const DEFAULT_CONFIG: WikiConfig = {
 const CONFIG_PATH = '.llm-wiki/config.toml';
 
 export function findVaultRoot(from: string = process.cwd()): string | null {
+  // Support LLMWIKI_VAULT_PATH env var to override vault location
+  const envPath = process.env.LLMWIKI_VAULT_PATH;
+  if (envPath) {
+    const resolved = resolve(envPath);
+    if (existsSync(join(resolved, CONFIG_PATH))) {
+      return resolved;
+    }
+    return null;
+  }
+
   let dir = resolve(from);
   while (true) {
     if (existsSync(join(dir, CONFIG_PATH))) {
