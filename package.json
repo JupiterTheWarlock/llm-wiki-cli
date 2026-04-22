@@ -1,6 +1,6 @@
 {
   "name": "@jupiterthewarlock/llm-wiki",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Agent-native LLM Wiki — AI-maintained knowledge base with Obsidian compatibility",
   "type": "module",
   "bin": {
