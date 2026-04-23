@@ -52,7 +52,7 @@ export function computeSync(
 
   for (const dir of dirs) {
     for (const filePath of listMarkdownFiles(dir)) {
-      const rel = relative(baseDir, filePath);
+      const rel = relative(baseDir, filePath).replace(/\\/g, '/');
       currentFiles.add(rel);
       const stat = statSync(filePath);
       const existing = state.entries[rel];
@@ -96,7 +96,7 @@ export function updateSyncState(
 
   for (const dir of dirs) {
     for (const filePath of listMarkdownFiles(dir)) {
-      const rel = relative(baseDir, filePath);
+      const rel = relative(baseDir, filePath).replace(/\\/g, '/');
       const stat = statSync(filePath);
       newEntries[rel] = {
         path: rel,

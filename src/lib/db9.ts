@@ -1,4 +1,6 @@
 import type { WikiPage } from './wiki.js';
+import type { EmbeddingConfig } from './config.js';
+import { generateEmbedding } from './embedding.js';
 
 async function loadPg() {
   try {
@@ -13,6 +15,7 @@ async function loadPg() {
 
 export interface DB9Config {
   url: string;
+  embeddingConfig?: EmbeddingConfig;
 }
 
 export interface DB9SearchResult {
@@ -23,14 +26,17 @@ export interface DB9SearchResult {
 
 /**
  * DB9 client wrapper for vector search and wiki index management.
- * Uses DB9's built-in embedding() function for server-side embeddings.
+ * Supports both server-side embedding() (DB9 cloud) and client-side
+ * embedding generation via an OpenAI-compatible API.
  */
 export class DB9Client {
   private pool: any; // pg.Pool — dynamically loaded
   private url: string;
+  private embeddingConfig?: EmbeddingConfig;
 
   constructor(config: DB9Config) {
     this.url = config.url;
+    this.embeddingConfig = config.embeddingConfig;
   }
 
   private async getPool() {
@@ -45,8 +51,18 @@ export class DB9Client {
     if (this.pool) await this.pool.end();
   }
 
+  private async getEmbedding(text: string): Promise<number[] | null> {
+    if (!this.embeddingConfig) return null;
+    return generateEmbedding(text, this.embeddingConfig);
+  }
+
+  private vectorDimensions(): number {
+    return this.embeddingConfig?.dimensions ?? 1024;
+  }
+
   async ensureSchema(): Promise<void> {
     const pool = await this.getPool();
+    const dims = this.vectorDimensions();
     await pool.query(`
       CREATE TABLE IF NOT EXISTS wiki_index (
         slug TEXT PRIMARY KEY,
@@ -57,7 +73,7 @@ export class DB9Client {
         sources TEXT[] DEFAULT '{}',
         content_hash TEXT NOT NULL,
         updated TEXT,
-        embedding VECTOR(1024)
+        embedding VECTOR(${dims})
       )
     `);
 
@@ -77,32 +93,65 @@ export class DB9Client {
 
   async upsertPage(page: WikiPage, contentHash: string): Promise<void> {
     const pool = await this.getPool();
+    const dims = this.vectorDimensions();
     const embeddingText = `${page.title}. ${page.description ?? ''}. ${page.content}`;
 
-    await pool.query(
-      `INSERT INTO wiki_index (slug, title, description, content, tags, sources, content_hash, updated, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, embedding($9)::vector(1024))
-       ON CONFLICT (slug) DO UPDATE SET
-         title = EXCLUDED.title,
-         description = EXCLUDED.description,
-         content = EXCLUDED.content,
-         tags = EXCLUDED.tags,
-         sources = EXCLUDED.sources,
-         content_hash = EXCLUDED.content_hash,
-         updated = EXCLUDED.updated,
-         embedding = EXCLUDED.embedding`,
-      [
-        page.slug,
-        page.title,
-        page.description ?? '',
-        page.content,
-        page.tags,
-        page.sources,
-        contentHash,
-        page.updated ?? '',
-        embeddingText,
-      ]
-    );
+    if (this.embeddingConfig) {
+      // Client-side embedding: generate vector locally, pass as parameter
+      const vector = await this.getEmbedding(embeddingText);
+      const vectorStr = `[${vector!.join(',')}]`;
+
+      await pool.query(
+        `INSERT INTO wiki_index (slug, title, description, content, tags, sources, content_hash, updated, embedding)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector(${dims}))
+         ON CONFLICT (slug) DO UPDATE SET
+           title = EXCLUDED.title,
+           description = EXCLUDED.description,
+           content = EXCLUDED.content,
+           tags = EXCLUDED.tags,
+           sources = EXCLUDED.sources,
+           content_hash = EXCLUDED.content_hash,
+           updated = EXCLUDED.updated,
+           embedding = EXCLUDED.embedding`,
+        [
+          page.slug,
+          page.title,
+          page.description ?? '',
+          page.content,
+          page.tags,
+          page.sources,
+          contentHash,
+          page.updated ?? '',
+          vectorStr,
+        ]
+      );
+    } else {
+      // Server-side embedding: use DB9's built-in embedding() function
+      await pool.query(
+        `INSERT INTO wiki_index (slug, title, description, content, tags, sources, content_hash, updated, embedding)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, embedding($9)::vector(${dims}))
+         ON CONFLICT (slug) DO UPDATE SET
+           title = EXCLUDED.title,
+           description = EXCLUDED.description,
+           content = EXCLUDED.content,
+           tags = EXCLUDED.tags,
+           sources = EXCLUDED.sources,
+           content_hash = EXCLUDED.content_hash,
+           updated = EXCLUDED.updated,
+           embedding = EXCLUDED.embedding`,
+        [
+          page.slug,
+          page.title,
+          page.description ?? '',
+          page.content,
+          page.tags,
+          page.sources,
+          contentHash,
+          page.updated ?? '',
+          embeddingText,
+        ]
+      );
+    }
 
     await pool.query(`DELETE FROM wiki_page_sources WHERE slug = $1`, [page.slug]);
     for (const source of page.sources) {
@@ -121,15 +170,36 @@ export class DB9Client {
 
   async vectorSearch(query: string, limit: number = 10): Promise<DB9SearchResult[]> {
     const pool = await this.getPool();
-    const result = await pool.query(
-      `WITH q AS (SELECT embedding($1)::vector(1024) AS qv)
-       SELECT slug, title, 1 - (embedding <=> q.qv) AS similarity
-       FROM wiki_index, q
-       WHERE embedding IS NOT NULL
-       ORDER BY embedding <=> q.qv
-       LIMIT $2`,
-      [query, limit]
-    );
+    const dims = this.vectorDimensions();
+
+    let sql: string;
+    let params: any[];
+
+    if (this.embeddingConfig) {
+      // Client-side embedding
+      const vector = await this.getEmbedding(query);
+      const vectorStr = `[${vector!.join(',')}]`;
+      sql = `
+        WITH q AS (SELECT $1::vector(${dims}) AS qv)
+        SELECT slug, title, 1 - (embedding <=> q.qv) AS similarity
+        FROM wiki_index, q
+        WHERE embedding IS NOT NULL
+        ORDER BY embedding <=> q.qv
+        LIMIT $2`;
+      params = [vectorStr, limit];
+    } else {
+      // Server-side embedding via DB9's embedding()
+      sql = `
+        WITH q AS (SELECT embedding($1)::vector(${dims}) AS qv)
+        SELECT slug, title, 1 - (embedding <=> q.qv) AS similarity
+        FROM wiki_index, q
+        WHERE embedding IS NOT NULL
+        ORDER BY embedding <=> q.qv
+        LIMIT $2`;
+      params = [query, limit];
+    }
+
+    const result = await pool.query(sql, params);
 
     return result.rows.map((row: any) => ({
       slug: row.slug,
@@ -170,7 +240,7 @@ export class DB9Client {
 /**
  * Create a DB9 client from config, or null if not configured.
  */
-export function createDB9Client(config: { db9?: { url: string } }): DB9Client | null {
+export function createDB9Client(config: { db9?: { url: string }; embedding?: EmbeddingConfig }): DB9Client | null {
   if (!config.db9?.url) return null;
-  return new DB9Client({ url: config.db9.url });
+  return new DB9Client({ url: config.db9.url, embeddingConfig: config.embedding });
 }

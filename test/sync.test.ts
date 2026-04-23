@@ -23,7 +23,7 @@ describe('computeSync', () => {
     writeFileSync(join(testDir, 'wiki/page-a.md'), '# Page A');
     const emptyState: SyncState = { entries: {}, lastSync: '' };
     const result = computeSync([join(testDir, 'wiki')], testDir, emptyState);
-    expect(result.added.map(p => p.replace(/\\/g, '/'))).toEqual(['wiki/page-a.md']);
+    expect(result.added).toEqual(['wiki/page-a.md']);
     expect(result.modified).toEqual([]);
     expect(result.deleted).toEqual([]);
   });
@@ -44,7 +44,7 @@ describe('computeSync', () => {
     writeFileSync(filePath, '# Unchanged');
     const state = updateSyncState([join(testDir, 'wiki')], testDir, { entries: {}, lastSync: '' });
     const result = computeSync([join(testDir, 'wiki')], testDir, state);
-    expect(result.unchanged.map(p => p.replace(/\\/g, '/'))).toEqual(['wiki/page.md']);
+    expect(result.unchanged).toEqual(['wiki/page.md']);
   });
 });
 
@@ -53,14 +53,10 @@ describe('updateSyncState', () => {
     writeFileSync(join(testDir, 'wiki/a.md'), '# A');
     writeFileSync(join(testDir, 'wiki/b.md'), '# B');
     const state = updateSyncState([join(testDir, 'wiki')], testDir, { entries: {}, lastSync: '' });
-    const normalizedEntries: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(state.entries)) {
-      normalizedEntries[key.replace(/\\/g, '/')] = val;
-    }
-    expect(Object.keys(normalizedEntries)).toHaveLength(2);
-    expect(normalizedEntries['wiki/a.md']).toBeDefined();
-    expect(normalizedEntries['wiki/b.md']).toBeDefined();
-    expect((normalizedEntries['wiki/a.md'] as { contentHash: string }).contentHash).toBeTruthy();
+    expect(Object.keys(state.entries)).toHaveLength(2);
+    expect(state.entries['wiki/a.md']).toBeDefined();
+    expect(state.entries['wiki/b.md']).toBeDefined();
+    expect(state.entries['wiki/a.md'].contentHash).toBeTruthy();
   });
 });
 

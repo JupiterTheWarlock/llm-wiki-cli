@@ -2,6 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import TOML from 'toml';
 
+export interface EmbeddingConfig {
+  api_url: string;
+  api_key: string;
+  model: string;
+  dimensions: number;
+}
+
 export interface WikiConfig {
   vault: {
     name: string;
@@ -10,6 +17,7 @@ export interface WikiConfig {
   db9?: {
     url: string;
   };
+  embedding?: EmbeddingConfig;
 }
 
 const DEFAULT_CONFIG: WikiConfig = {
