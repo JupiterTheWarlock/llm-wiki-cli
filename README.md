@@ -139,7 +139,7 @@ language = "en"    # "en" or "zh"
 # url = "postgresql://..."
 ```
 
-The CLI walks up from the current directory to find `.llm-wiki/config.toml` and locate the vault root.
+The CLI walks up from the current directory to find `.llm-wiki/config.toml` and locate the vault root. Alternatively, set the `LLMWIKI_VAULT_PATH` environment variable to the vault root path to skip directory walking.
 
 ## Wiki Page Format
 
