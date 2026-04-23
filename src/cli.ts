@@ -1,8 +1,23 @@
 import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initCommand } from './commands/init.js';
+
+// Auto-load .env from cwd
+const dotEnv = join(process.cwd(), '.env');
+if (existsSync(dotEnv)) {
+  for (const line of readFileSync(dotEnv, 'utf-8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if (/^".*"$|^'.*'$/.test(val)) val = val.slice(1, -1);
+    if (!(key in process.env)) process.env[key] = val;
+  }
+}
 import { searchCommand } from './commands/search.js';
 import { graphCommand } from './commands/graph.js';
 import { statusCommand } from './commands/status.js';
